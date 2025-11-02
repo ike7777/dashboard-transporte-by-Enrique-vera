@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Gestión de Transporte</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9; /* Cambiado a slate-100 para que resalten los colores */
+        }
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 40;
+            transition: opacity 0.3s ease;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 50;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .modal-backdrop.active, .modal.active {
+            display: block;
+        }
+        .kpi-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+         #toast {
+            position: fixed;
+            bottom: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 500;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease-in-out;
+            z-index: 100;
+        }
+        #toast.show {
+            opacity: 1;
+            visibility: visible;
+            bottom: 20px;
+        }
+        .modal-list-scroll::-webkit-scrollbar { width: 6px; }
+        .modal-list-scroll::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .modal-list-scroll::-webkit-scrollbar-thumb { background: #c5c5c5; border-radius: 10px; }
+        .modal-list-scroll::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        .trend-up { color: #22c55e; }
+        .trend-down { color: #ef4444; }
+        .trend-neutral { color: #6b7280; }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <div class="w-full bg-gray-200 p-2 text-center text-sm text-gray-700 font-semibold">
+        Hecho por Enrique Vera
+    </div>
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <header class="bg-gradient-to-br from-gray-800 to-gray-900 text-white p-8 rounded-2xl shadow-2xl mb-8 relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-full bg-black opacity-20"></div>
+            <div class="relative z-10">
+                <div class="flex justify-between items-center mb-4">
+                    <div>
+                        <h1 id="greeting" class="text-3xl sm:text-4xl font-extrabold tracking-tight">Buenas Noches</h1>
+                        <p class="text-gray-300 mt-2 text-lg">Tu panel de control financiero está listo.</p>
+                    </div>
+                    <i class="fas fa-chart-line fa-3x text-gray-500"></i>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 relative z-10">
+                    <div>
+                        <label for="month-selector" class="block text-sm font-medium text-gray-300">Analizar Mes</label>
+                        <select id="month-selector" class="w-full mt-1 p-2 bg-gray-700 bg-opacity-50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+                            </select>
+                    </div>
+                    <div>
+                        <label for="year-selector" class="block text-sm font-medium text-gray-300">Analizar Año</label>
+                        <select id="year-selector" class="w-full mt-1 p-2 bg-gray-700 bg-opacity-50 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+                            </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="kpi-card p-5 rounded-xl">
+                        <p class="text-sm font-medium text-gray-300 uppercase tracking-wider">Fondos Líquidos (Mes Sel.)</p>
+                        <p id="kpi-total-liquid" class="text-3xl font-bold mt-2">S/ 0.00</p>
+                        <p id="kpi-total-liquid-trend" class="text-sm font-medium mt-1 trend-neutral">-- vs. Mes Anterior</p>
+                    </div>
+                    <div class="kpi-card p-5 rounded-xl">
+                        <p class="text-sm font-medium text-gray-300 uppercase tracking-wider">Utilidad Neta (Mes Sel.)</p>
+                        <p id="kpi-net-profit" class="text-3xl font-bold mt-2">S/ 0.00</p>
+                        <p id="kpi-net-profit-trend" class="text-sm font-medium mt-1 trend-neutral">-- vs. Mes Anterior</p>
+                    </div>
+                    <div class="kpi-card p-5 rounded-xl">
+                        <p class="text-sm font-medium text-gray-300 uppercase tracking-wider">Fondos Detraídos (Mes Sel.)</p>
+                        <p id="kpi-detraccion" class="text-3xl font-bold mt-2">S/ 0.00</p>
+                        <p id="kpi-detraccion-total" class="text-sm font-medium mt-1 text-gray-300">Total Acumulado: S/ 0.00</p>
+                    </div>
+                    <div class="kpi-card p-5 rounded-xl">
+                        <p class="text-sm font-medium text-gray-300 uppercase tracking-wider">Viajes Realizados (Mes Sel.)</p>
+                        <p id="kpi-total-trips" class="text-3xl font-bold mt-2">0</p>
+                        <p id="kpi-total-trips-trend" class="text-sm font-medium mt-1 trend-neutral">-- vs. Mes Anterior</p>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="bg-white p-6 rounded-2xl shadow-lg mb-8">
+                <h2 class="text-2xl font-semibold mb-6 text-gray-800 border-b pb-3">Registrar Nuevo Envío</h2>
+                <form id="shipping-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="space-y-2">
+                        <label for="fecha-viaje" class="font-medium text-gray-700">Fecha del Viaje</label>
+                        <input type="date" id="fecha-viaje" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                    </div>
+                    <div class="space-y-2">
+                        <label for="guia-remitente" class="font-medium text-gray-700">Guía Remitente</label>
+                        <input type="text" id="guia-remitente" placeholder="Ej: F001-00123" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                    </div>
+                     <div class="space-y-2">
+                        <label for="guia-transportista" class="font-medium text-gray-700">Guía Transportista</label>
+                        <input type="text" id="guia-transportista" placeholder="Ej: T001-00456" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                    </div>
+                    <div class="space-y-2">
+                        <label for="transportista" class="font-medium text-gray-700">Transportista</label>
+                        <select id="transportista" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                            <option>Iván Vera García</option>
+                        </select>
+                    </div>
+                    <div class="space-y-2">
+                        <label for="origen" class="font-medium text-gray-700">Origen</label>
+                        <input type="text" id="origen" placeholder="Ciudad de origen" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                    </div>
+                    <div class="space-y-2">
+                        <label for="destino" class="font-medium text-gray-700">Destino</label>
+                        <input type="text" id="destino" placeholder="Ciudad de destino" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                    </div>
+                    <div class="space-y-2">
+                        <label for="tipo-carga" class="font-medium text-gray-700">Tipo de Carga</label>
+                        <select id="tipo-carga" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                            <option>Cemento</option>
+                            <option>Fierro</option>
+                            <option>Ladrillo</option>
+                            <option>Big Bag</option>
+                            <option>Cemento y Ladrillo</option>
+                            <option>Cemento y Fierro</option>
+                        </select>
+                    </div>
+                    <div class="space-y-2">
+                        <label for="tipo-carro" class="font-medium text-gray-700">Tipo de Camión</label>
+                        <select id="tipo-carro" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                            <option>FH12</option>
+                            <option>Kenworth</option>
+                        </select>
+                    </div>
+                    <div class="md:col-span-2 lg:col-span-4 text-right mt-4">
+                        <button type="submit" class="bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 transition-transform transform hover:scale-105 shadow-md">
+                            <i class="fas fa-plus mr-2"></i>Agregar Envío
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl shadow-lg mb-8">
+                 <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                    <h2 class="text-2xl font-semibold text-gray-800">Listado Histórico de Envíos</h2>
+                    <div class="flex items-center gap-4 flex-wrap">
+                         <button id="import-btn" class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition shadow-sm">
+                            <i class="fas fa-upload mr-2"></i>Importar
+                        </button>
+                        <button id="export-btn" class="bg-gray-700 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-800 transition shadow-sm">
+                            <i class="fas fa-download mr-2"></i>Exportar
+                        </button>
+                        <button id="save-btn" class="bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 transition shadow-sm">
+                            <i class="fas fa-save mr-2"></i>Guardar
+                        </button>
+                        <div class="relative w-full sm:w-auto">
+                            <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                            <input type="text" id="search-input" placeholder="Buscar..." class="w-full sm:w-48 lg:w-64 p-3 pl-10 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition">
+                        </div>
+                    </div>
+                </div>
+                 <div class="text-right mb-4">
+                    <span id="save-status" class="text-sm text-gray-500 italic">Nunca guardado.</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-gray-600">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 rounded-l-lg">Fecha</th>
+                                <th scope="col" class="px-6 py-3">Nº Factura(s)</th>
+                                <th scope="col" class="px-6 py-3">Guía Remitente</th>
+                                <th scope="col" class="px-6 py-3">Guía Transportista</th>
+                                <th scope="col" class="px-6 py-3">Destino</th>
+                                <th scope="col" class="px-6 py-3">Camión</th>
+                                <th scope="col" class="px-6 py-3">Estado</th>
+                                <th scope="col" class="px-6 py-3">M. Facturado</th>
+                                <th scope="col" class="px-6 py-3">T. Gastos</th>
+                                <th scope="col" class="px-6 py-3">Utilidad</th>
+                                <th scope="col" class="px-6 py-3 rounded-r-lg text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shipping-list"></tbody>
+                    </table>
+                     <p id="no-results" class="text-center text-gray-500 py-8 hidden">No se encontraron envíos.</p>
+                </div>
+            </div>
+            
+            <div class="bg-white p-6 rounded-2xl shadow-lg">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-6 border-b pb-3">Análisis y Reportes</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="bg-gray-50 p-4 rounded-xl lg:col-span-2">
+                        <h3 id="monthly-chart-title" class="font-semibold mb-4 text-center">Gastos vs. Utilidad (Mes Seleccionado)</h3>
+                        <canvas id="expensesVsProfitMonthlyChart"></canvas>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-xl">
+                        <h3 class="font-semibold mb-4 text-center">Gastos vs. Utilidad (Total Histórico)</h3>
+                        <canvas id="expensesVsProfitHistoricalChart"></canvas>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-xl">
+                        <h3 class="font-semibold mb-4 text-center">Distribución de Gastos (Total Histórico)</h3>
+                        <canvas id="expenseDistributionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <div id="edit-modal-backdrop" class="modal-backdrop"></div>
+    <div id="edit-modal" class="modal bg-white p-8 rounded-2xl shadow-2xl w-11/12 max-w-2xl">
+        <h2 class="text-2xl font-semibold mb-6 text-gray-800">Editar Envío</h2>
+        <form id="edit-form" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+             <input type="hidden" id="edit-id">
+             <div class="space-y-2">
+                <label for="edit-fecha-viaje" class="font-medium text-gray-700">Fecha del Viaje</label>
+                <input type="date" id="edit-fecha-viaje" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg" required>
+            </div>
+             <div class="space-y-2">
+                <label for="edit-guia-remitente" class="font-medium text-gray-700">Guía Remitente</label>
+                <input type="text" id="edit-guia-remitente" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg">
+            </div>
+            <div class="space-y-2">
+                <label for="edit-guia-transportista" class="font-medium text-gray-700">Guía Transportista</label>
+                <input type="text" id="edit-guia-transportista" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg">
+            </div>
+            <div class="space-y-2">
+                <label for="edit-transportista" class="font-medium text-gray-700">Transportista</label>
+                <select id="edit-transportista" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                    <option>Iván Vera García</option>
+                </select>
+            </div>
+            <div class="space-y-2">
+                <label for="edit-origen" class="font-medium text-gray-700">Origen</label>
+                <input type="text" id="edit-origen" placeholder="Ciudad de origen" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg">
+            </div>
+            <div class="space-y-2">
+                <label for="edit-destino" class="font-medium text-gray-700">Destino</label>
+                <input type="text" id="edit-destino" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg">
+            </div>
+            <div class="space-y-2">
+                <label for="edit-tipo-carga" class="font-medium text-gray-700">Tipo de Carga</label>
+                <select id="edit-tipo-carga" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                    <option>Cemento</option>
+                    <option>Fierro</option>
+                    <option>Ladrillo</option>
+                    <option>Big Bag</option>
+                    <option>Cemento y Ladrillo</option>
+                    <option>Cemento y Fierro</option>
+                </select>
+            </div>
+            <div class="space-y-2">
+                <label for="edit-tipo-carro" class="font-medium text-gray-700">Tipo de Camión</label>
+                <select id="edit-tipo-carro" class="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                    <option>FH12</option>
+                    <option>Kenworth</option>
+                </select>
+            </div>
+            <div class="md:col-span-2 flex justify-end gap-4 mt-4">
+                <button type="button" id="cancel-edit" class="bg-gray-200 text-gray-800 font-bold py-3 px-6 rounded-lg hover:bg-gray-300 transition">Cancelar</button>
+                <button type="submit" class="bg-green-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-600 transition">Guardar Cambios</button>
+            </div>
+        </form>
+    </div>
+
+    <div id="expenses-modal-backdrop" class="modal-backdrop"></div>
+    <div id="expenses-modal" class="modal bg-white p-8 rounded-2xl shadow-2xl w-11/12 max-w-5xl">
+        <div class="flex justify-between items-center mb-6">
+            <h2 id="expenses-modal-title" class="text-2xl font-semibold text-gray-800">Gestión Financiera del Envío</h2>
+            <button id="close-expenses-modal" class="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
+        </div>
+        
+        <div class="bg-gray-50 p-6 rounded-lg mb-8">
+            <input type="hidden" id="expenses-shipment-id">
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 items-center">
+                <div class="p-3 bg-blue-100 text-blue-800 rounded-lg text-center">
+                    <p class="text-xs font-medium uppercase">Total Facturado</p>
+                    <p id="total-facturado-display" class="text-xl font-bold">S/ 0.00</p>
+                </div>
+                <div class="p-3 bg-cyan-100 text-cyan-800 rounded-lg text-center">
+                    <p class="text-xs font-medium uppercase">Total Líquido</p>
+                    <p id="total-liquido-display" class="text-xl font-bold">S/ 0.00</p>
+                </div>
+                <div class="p-3 bg-purple-100 text-purple-800 rounded-lg text-center">
+                    <p class="text-xs font-medium uppercase">Total Detraído</p>
+                    <p id="total-detraido-display" class="text-xl font-bold">S/ 0.00</p>
+                </div>
+                 <div class="p-3 bg-red-100 text-red-800 rounded-lg text-center">
+                    <p class="text-xs font-medium uppercase">Total Gastos</p>
+                    <p id="total-expenses-display" class="text-xl font-bold">S/ 0.00</p>
+                </div>
+                <div id="utility-summary-box" class="p-3 bg-green-100 text-green-800 rounded-lg text-center">
+                    <p class="text-xs font-medium uppercase">Utilidad</p>
+                    <p id="utility-display" class="text-xl font-bold">S/ 0.00</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            <div class="bg-gray-50 p-6 rounded-lg">
+                <h3 class="font-semibold text-lg mb-4 border-b pb-2">Gestión de Facturas</h3>
+                <form id="add-factura-form" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4 items-end">
+                    <div class="sm:col-span-1 space-y-1">
+                        <label for="factura-numero" class="font-medium text-sm text-gray-700">Nº Factura</label>
+                        <input type="text" id="factura-numero" placeholder="Ej: F001-867" class="w-full p-3 bg-white border border-gray-300 rounded-lg" required>
+                    </div>
+                    <div class="sm:col-span-1 space-y-1">
+                        <label for="factura-monto" class="font-medium text-sm text-gray-700">Monto Total (S/)</label>
+                        <input type="number" id="factura-monto" placeholder="0.00" step="0.01" class="w-full p-3 bg-white border border-gray-300 rounded-lg" required>
+                    </div>
+                    <button type="submit" class="sm:col-span-1 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition py-3 h-12">
+                        <i class="fas fa-plus"></i> Añadir
+                    </button>
+                    <div class="sm:col-span-3 flex items-center justify-start gap-3">
+                         <input type="checkbox" id="factura-detraccion" class="h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                         <label for="factura-detraccion" class="font-medium text-gray-700">¿Aplica Detracción? (4%)</label>
+                    </div>
+                </form>
+                <div id="factura-list" class="space-y-3 max-h-64 overflow-y-auto modal-list-scroll pr-2">
+                    </div>
+                <p id="no-facturas" class="text-center text-gray-500 py-8">No hay facturas registradas.</p>
+            </div>
+
+            <div class="bg-gray-50 p-6 rounded-lg">
+                <h3 class="font-semibold text-lg mb-4 border-b pb-2">Gestión de Gastos</h3>
+                 <div class="space-y-2 mb-4">
+                    <label for="gasto-combustible" class="font-medium text-gray-700">Gasto Combustible (S/)</label>
+                    <input type="number" id="gasto-combustible" placeholder="0.00" class="w-full p-3 bg-white border border-gray-300 rounded-lg">
+                </div>
+                <form id="add-expense-form" class="space-y-4">
+                    <h4 class="font-medium text-gray-700 border-t pt-4">Otros Gastos</h4>
+                    <div>
+                        <label for="expense-type" class="font-medium text-sm text-gray-700">Tipo de Gasto</label>
+                        <select id="expense-type" class="w-full p-3 mt-1 bg-white border border-gray-300 rounded-lg">
+                            <option>Peaje</option>
+                            <option>Encarpado</option>
+                            <option>Viáticos</option>
+                            <option>Llantas</option>
+                            <option>Otros</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="expense-description" class="font-medium text-sm text-gray-700">Descripción (Opcional)</label>
+                        <input type="text" id="expense-description" placeholder="Ej: Peaje Mórrope" class="w-full p-3 mt-1 bg-white border border-gray-300 rounded-lg">
+                    </div>
+                     <div>
+                        <label for="expense-amount" class="font-medium text-sm text-gray-700">Monto (S/)</label>
+                        <input type="number" id="expense-amount" placeholder="0.00" step="0.10" class="w-full p-3 mt-1 bg-white border border-gray-300 rounded-lg" required>
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 transition">
+                        <i class="fas fa-plus mr-2"></i>Agregar Gasto
+                    </button>
+                </form>
+                 <div id="expense-list" class="space-y-2 max-h-48 overflow-y-auto modal-list-scroll pr-2 mt-4">
+                     </div>
+                 <p id="no-expenses" class="text-center text-gray-500 py-8">No hay otros gastos registrados.</p>
+            </div>
+
+        </div>
+    </div>
+    
+    <div id="toast"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Declaración de Elementos ---
+            const shippingForm = document.getElementById('shipping-form');
+            const shippingList = document.getElementById('shipping-list');
+            const searchInput = document.getElementById('search-input');
+            const noResults = document.getElementById('no-results');
+            const exportBtn = document.getElementById('export-btn');
+            const importBtn = document.getElementById('import-btn');
+            const saveBtn = document.getElementById('save-btn');
+            const saveStatus = document.getElementById('save-status');
+
+            // Selectores de fecha
+            const monthSelector = document.getElementById('month-selector');
+            const yearSelector = document.getElementById('year-selector');
+
+            const editModal = document.getElementById('edit-modal');
+            const editModalBackdrop = document.getElementById('edit-modal-backdrop');
+            const editForm = document.getElementById('edit-form');
+            const cancelEditBtn = document.getElementById('cancel-edit');
+
+            const expensesModal = document.getElementById('expenses-modal');
+            const expensesModalBackdrop = document.getElementById('expenses-modal-backdrop');
+            const closeExpensesModalBtn = document.getElementById('close-expenses-modal');
+            
+            const addExpenseForm = document.getElementById('add-expense-form');
+            const expenseList = document.getElementById('expense-list');
+            const noExpenses = document.getElementById('no-expenses');
+
+            const addFacturaForm = document.getElementById('add-factura-form');
+            const facturaList = document.getElementById('factura-list');
+            const noFacturas = document.getElementById('no-facturas');
+
+            const gastoCombustibleInput = document.getElementById('gasto-combustible');
+            const totalFacturadoDisplay = document.getElementById('total-facturado-display');
+            const totalLiquidoDisplay = document.getElementById('total-liquido-display');
+            const totalDetraidoDisplay = document.getElementById('total-detraido-display');
+            const totalExpensesDisplay = document.getElementById('total-expenses-display');
+            const utilityDisplay = document.getElementById('utility-display');
+            const utilitySummaryBox = document.getElementById('utility-summary-box');
+
+            let shipments = [];
+            let nextId = 1;
+            let expensesVsProfitMonthlyChart, expensesVsProfitHistoricalChart, expenseDistributionChart;
+
+            // --- Funciones de Utilidad ---
+            
+            const formatCurrency = (amount) => `S/ ${parseFloat(amount || 0).toFixed(2)}`;
+            
+            const showToast = (message, type = 'success') => {
+                const toast = document.getElementById('toast');
+                toast.textContent = message;
+                toast.className = ``; // Reset classes
+                toast.classList.add('fixed', 'bottom-5', 'left-1/2', '-translate-x-1/2', 'px-6', 'py-3', 'rounded-lg', 'shadow-lg', 'text-white', 'font-semibold', 'z-50', 'transition-all', 'duration-300');
+                if (type === 'success') toast.classList.add('bg-green-500');
+                else if (type === 'warning') toast.classList.add('bg-yellow-500');
+                else toast.classList.add('bg-red-500');
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 3000);
+            };
+
+            const setGreeting = () => {
+                const hour = new Date().getHours();
+                const greeting = document.getElementById('greeting');
+                if (hour < 12) greeting.textContent = "Buenos Días";
+                else if (hour < 18) greeting.textContent = "Buenas Tardes";
+                else greeting.textContent = "Buenas Noches";
+            };
+
+            const getTodayDateString = () => new Date().toISOString().split('T')[0];
+            
+            const populateDateSelectors = () => {
+                const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+                const currentMonth = new Date().getMonth();
+                const currentYear = new Date().getFullYear();
+
+                // Popular meses
+                months.forEach((month, index) => {
+                    const option = document.createElement('option');
+                    option.value = index; // 0-11
+                    option.textContent = month;
+                    if (index === currentMonth) option.selected = true;
+                    monthSelector.appendChild(option);
+                });
+
+                // Popular años (ej: últimos 5 años + actual)
+                const yearsWithData = new Set(shipments.map(s => new Date(s.fechaViaje + 'T00:00:00').getFullYear()));
+                yearsWithData.add(currentYear);
+                const sortedYears = Array.from(yearsWithData).sort((a, b) => b - a);
+                
+                let minYear = Math.min(...sortedYears, currentYear - 5);
+                yearSelector.innerHTML = '';
+                for (let i = currentYear; i >= minYear; i--) {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = i;
+                    if (i === currentYear) option.selected = true;
+                    yearSelector.appendChild(option);
+                }
+                
+                // Añadir listeners
+                monthSelector.addEventListener('change', updateDashboard);
+                yearSelector.addEventListener('change', updateDashboard);
+            };
+
+            // --- Funciones de Datos (Guardado y Carga) ---
+
+            const updateSaveStatus = () => {
+                const now = new Date();
+                const timeString = `Último guardado: ${now.toLocaleTimeString('es-PE', { hour: '2-digit', minute:'2-digit', second:'2-digit' })}`;
+                saveStatus.textContent = timeString;
+                try {
+                     localStorage.setItem('lastSaveTimestamp', timeString);
+                } catch(e) { console.error("No se pudo guardar la hora.", e); }
+            };
+
+            const saveToLocalStorage = () => {
+                try {
+                    localStorage.setItem('shipments', JSON.stringify(shipments));
+                    updateSaveStatus();
+                } catch (e) {
+                    console.error("No se pudo guardar en localStorage. Use la función de exportar.", e);
+                    showToast("Error al guardar automáticamente. Usa el botón Exportar.", "error");
+                }
+            };
+            
+            const loadFromLocalStorage = () => {
+                try {
+                    const storedShipments = localStorage.getItem('shipments');
+                    if (storedShipments) {
+                        shipments = JSON.parse(storedShipments);
+                    }
+                    const lastSaveTimestamp = localStorage.getItem('lastSaveTimestamp');
+                    saveStatus.textContent = lastSaveTimestamp || 'Nunca guardado.';
+                } catch (e) {
+                    console.error("Error al cargar datos de localStorage:", e);
+                    shipments = []; 
+                    saveStatus.textContent = 'Error al cargar.';
+                }
+                updateNextId();
+            };
+
+            const updateNextId = () => {
+                if (shipments.length > 0) {
+                    const validIds = shipments
+                        .map(s => (s.id && typeof s.id === 'string') ? parseInt(s.id.replace('GT-24', ''), 10) : NaN)
+                        .filter(num => !isNaN(num));
+                    nextId = validIds.length > 0 ? Math.max(...validIds) + 1 : 1;
+                } else {
+                    nextId = 1;
+                }
+            };
+
+            // --- Funciones de Cálculo ---
+
+            const getFacturaCalculations = (factura) => {
+                const montoTotal = factura.monto || 0;
+                const aplicaDetraccion = factura.aplicaDetraccion || false;
+                const montoDetraccion = aplicaDetraccion ? montoTotal * 0.04 : 0;
+                const montoLiquido = montoTotal - montoDetraccion;
+                return { montoTotal, montoDetraccion, montoLiquido };
+            };
+
+            const calculateTripTotals = (shipment) => {
+                let totalFacturado = 0;
+                let totalLiquido = 0;
+                let totalDetraido = 0;
+
+                (shipment.facturas || []).forEach(f => {
+                    const { montoTotal, montoDetraccion, montoLiquido } = getFacturaCalculations(f);
+                    totalFacturado += montoTotal;
+                    totalLiquido += montoLiquido;
+                    totalDetraido += montoDetraccion;
+                });
+
+                const totalOtherExpenses = (shipment.expenses || []).reduce((sum, exp) => sum + (exp.amount || 0), 0);
+                const totalGastos = totalOtherExpenses + (shipment.gastoCombustible || 0);
+                const utilidad = totalFacturado - totalGastos;
+                
+                return { totalFacturado, totalGastos, utilidad, totalLiquido, totalDetraido };
+            };
+
+            const calculateAllKPIs = (shipmentArray) => {
+                return shipmentArray.reduce((acc, s) => {
+                    const { totalLiquido, utilidad, totalDetraido } = calculateTripTotals(s);
+                    acc.totalLiquido += totalLiquido;
+                    acc.totalUtilidad += utilidad;
+                    acc.totalDetraido += totalDetraido;
+                    return acc;
+                }, { totalLiquido: 0, totalUtilidad: 0, totalDetraido: 0, totalViajes: shipmentArray.length });
+            };
+            
+            const calculateTripStatus = (shipment) => {
+                const facturas = shipment.facturas || [];
+                if (facturas.length === 0) return { text: 'Pendiente', color: 'bg-red-100 text-red-800' };
+                const paidCount = facturas.filter(f => f.estado === 'Pagado').length;
+                if (paidCount === 0) return { text: 'Pendiente', color: 'bg-red-100 text-red-800' };
+                if (paidCount === facturas.length) return { text: 'Pagado', color: 'bg-green-100 text-green-800' };
+                return { text: 'Parcial', color: 'bg-yellow-100 text-yellow-800' };
+            };
+
+            // --- Funciones de Renderizado (UI) ---
+
+            const renderShipments = (filter = '') => {
+                shippingList.innerHTML = '';
+                const lowercasedFilter = filter.toLowerCase();
+                const filteredShipments = shipments.filter(s =>
+                    Object.values(s).some(val => 
+                        String(val).toLowerCase().includes(lowercasedFilter)
+                    ) ||
+                    (s.facturas || []).some(f => f.numero.toLowerCase().includes(lowercasedFilter))
+                );
+
+                noResults.style.display = (filteredShipments.length === 0) ? 'block' : 'none';
+                
+                const getColorClassForCarga = (tipoCarga) => {
+                    switch (tipoCarga) {
+                        case 'Fierro': return 'bg-gray-300'; // Gris más fuerte
+                        case 'Cemento': return 'bg-stone-300'; // Marrón/piedra más fuerte
+                        case 'Ladrillo': return 'bg-red-300'; // Rojo ladrillo más fuerte
+                        case 'Big Bag': return 'bg-blue-300'; // Azul más fuerte
+                        case 'Cemento y Ladrillo': return 'bg-gradient-to-r from-stone-300 to-red-300';
+                        case 'Cemento y Fierro': return 'bg-gradient-to-r from-stone-300 to-gray-300';
+                        default: return 'bg-white';
+                    }
+                };
+
+                filteredShipments.sort((a, b) => new Date(b.fechaViaje) - new Date(a.fechaViaje)); // Ordenar por fecha
+
+                filteredShipments.forEach(shipment => {
+                    const row = document.createElement('tr');
+                    const colorClass = getColorClassForCarga(shipment.tipoCarga);
+                    // Aplicamos el color y un hover más notable
+                    row.className = `border-b transition-colors duration-200 ${colorClass} hover:bg-gray-400 hover:text-gray-900`; 
+                    
+                    const { totalFacturado, totalGastos, utilidad } = calculateTripTotals(shipment);
+                    const tripStatus = calculateTripStatus(shipment);
+                    const facturaDisplay = (shipment.facturas && shipment.facturas.length > 0)
+                        ? shipment.facturas.map(f => f.numero).join(', ')
+                        : 'Sin Factura';
+                    
+                    row.innerHTML = `
+                        <td class="px-6 py-4">${shipment.fechaViaje}</td>
+                        <td class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${facturaDisplay}</td>
+                        <td class="px-6 py-4">${shipment.guiaRemitente}</td>
+                        <td class="px-6 py-4">${shipment.guiaTransportista}</td>
+                        <td class="px-6 py-4">${shipment.destino}</td>
+                        <td class="px-6 py-4">${shipment.tipoCarro}</td>
+                        <td class="px-6 py-4"><span class="px-2 py-1 text-xs font-semibold rounded-full ${tripStatus.color}">${tripStatus.text}</span></td>
+                        <td class="px-6 py-4 font-medium">${formatCurrency(totalFacturado)}</td>
+                        <td class="px-6 py-4 font-medium text-red-600">${formatCurrency(totalGastos)}</td>
+                        <td class="px-6 py-4 font-bold ${utilidad >= 0 ? 'text-green-600' : 'text-red-600'}">${formatCurrency(utilidad)}</td>
+                        <td class="px-6 py-4 text-center">
+                            <button class="text-yellow-500 hover:text-yellow-700 p-2" onclick="openExpensesModal('${shipment.id}')" title="Registrar Gastos/Facturas"><i class="fas fa-dollar-sign"></i></button>
+                            <button class="text-blue-600 hover:text-blue-800 p-2" onclick="editShipment('${shipment.id}')" title="Editar Viaje"><i class="fas fa-edit"></i></button>
+                            <button class="text-red-600 hover:text-red-800 p-2" onclick="deleteShipment('${shipment.id}')" title="Eliminar"><i class="fas fa-trash"></i></button>
+                        </td>
+                    `;
+                    shippingList.appendChild(row);
+                });
+            };
+            
+            const updateDashboard = () => {
+                // Leer valores seleccionados
+                const selectedMonth = parseInt(monthSelector.value); // 0-11
+                const selectedYear = parseInt(yearSelector.value);
+
+                // Calcular mes anterior
+                const lastMonth = (selectedMonth === 0) ? 11 : selectedMonth - 1;
+                const lastMonthYear = (selectedMonth === 0) ? selectedYear - 1 : selectedYear;
+
+                // Filtrar datos
+                const shipmentsThisMonth = shipments.filter(s => {
+                    const d = new Date(s.fechaViaje + 'T00:00:00'); // Forzar zona horaria local
+                    return d.getFullYear() === selectedYear && d.getMonth() === selectedMonth;
+                });
+                const shipmentsLastMonth = shipments.filter(s => {
+                    const d = new Date(s.fechaViaje + 'T00:00:00'); // Forzar zona horaria local
+                    return d.getFullYear() === lastMonthYear && d.getMonth() === lastMonth;
+                });
+
+                // Calcular KPIs
+                const kpisThisMonth = calculateAllKPIs(shipmentsThisMonth);
+                const kpisLastMonth = calculateAllKPIs(shipmentsLastMonth);
+                const kpisTotal = calculateAllKPIs(shipments);
+
+                // Actualizar tarjetas KPI
+                animateCounter('kpi-total-liquid', kpisThisMonth.totalLiquido, true);
+                animateCounter('kpi-net-profit', kpisThisMonth.totalUtilidad, true);
+                animateCounter('kpi-detraccion', kpisThisMonth.totalDetraido, true);
+                document.getElementById('kpi-detraccion-total').textContent = `Total Acumulado: ${formatCurrency(kpisTotal.totalDetraido)}`;
+                animateCounter('kpi-total-trips', kpisThisMonth.totalViajes);
+
+                // Actualizar tendencias
+                renderTrend('kpi-total-liquid-trend', kpisThisMonth.totalLiquido, kpisLastMonth.totalLiquido, true);
+                renderTrend('kpi-net-profit-trend', kpisThisMonth.totalUtilidad, kpisLastMonth.totalUtilidad, true);
+                renderTrend('kpi-total-trips-trend', kpisThisMonth.totalViajes, kpisLastMonth.totalViajes, false);
+
+                // --- Actualizar Gráficos ---
+
+                // 1. Gráfico Mensual (Nuevo)
+                const monthlyTotalGastos = shipmentsThisMonth.reduce((sum, s) => sum + calculateTripTotals(s).totalGastos, 0);
+                const monthlyTotalUtilidad = kpisThisMonth.totalUtilidad;
+                updateExpensesVsProfitMonthlyChart(monthlyTotalGastos, monthlyTotalUtilidad);
+
+                // 2. Gráfico Histórico 1 (Gastos vs Utilidad Total)
+                const totalGastos = shipments.reduce((sum, s) => sum + calculateTripTotals(s).totalGastos, 0);
+                updateExpensesVsProfitHistoricalChart(totalGastos, kpisTotal.totalUtilidad);
+                
+                // 3. Gráfico Histórico 2 (Distribución de Gastos)
+                updateExpenseDistributionChart();
+            };
+            
+            const renderTrend = (elementId, currentValue, lastValue, isCurrency) => {
+                const el = document.getElementById(elementId);
+                if (!el) return;
+                
+                let diff = currentValue - lastValue;
+                let percentChange = (lastValue === 0 || lastValue === -0) ? (currentValue > 0 ? 100 : 0) : (diff / Math.abs(lastValue)) * 100;
+                
+                let icon = 'fa-minus';
+                let colorClass = 'trend-neutral';
+                let text = '';
+
+                if (lastValue === 0 && currentValue === 0) {
+                     text = '-- vs. Mes Anterior';
+                } else if (diff > 0) {
+                    icon = 'fa-arrow-up';
+                    colorClass = 'trend-up';
+                    text = `+${isCurrency ? formatCurrency(diff) : diff} (+${percentChange.toFixed(0)}%)`;
+                } else if (diff < 0) {
+                    icon = 'fa-arrow-down';
+                    colorClass = 'trend-down';
+                    text = `${isCurrency ? formatCurrency(diff) : diff} (${percentChange.toFixed(0)}%)`;
+                } else {
+                    text = 'Sin cambios (0%)';
+                }
+                
+                el.className = `text-sm font-medium mt-1 ${colorClass}`;
+                el.innerHTML = `<i class="fas ${icon} mr-1"></i> ${text}`;
+            };
+
+            function animateCounter(id, finalValue, isCurrency = false) {
+                const element = document.getElementById(id);
+                if (!element) return;
+                const duration = 1000;
+                let startValue = parseFloat(element.textContent.replace(/[S/\s,]/g, '')) || 0;
+                let startTime = null;
+
+                function animation(currentTime) {
+                    if (startTime === null) startTime = currentTime;
+                    const elapsedTime = currentTime - startTime;
+                    const progress = Math.min(elapsedTime / duration, 1);
+                    const currentValue = startValue + (finalValue - startValue) * progress;
+                    
+                    element.textContent = isCurrency ? formatCurrency(currentValue) : Math.round(currentValue);
+                    if (elapsedTime < duration) requestAnimationFrame(animation);
+                    else element.textContent = isCurrency ? formatCurrency(finalValue) : finalValue;
+                }
+                requestAnimationFrame(animation);
+            }
+            
+            // --- Gráficos ---
+
+            const updateExpensesVsProfitMonthlyChart = (totalGastos, totalUtilidad) => {
+                const ctx = document.getElementById('expensesVsProfitMonthlyChart').getContext('2d');
+                if (expensesVsProfitMonthlyChart) expensesVsProfitMonthlyChart.destroy();
+                
+                const selectedMonthName = monthSelector.options[monthSelector.selectedIndex].text;
+                const selectedYear = yearSelector.value;
+                const titleText = `Gastos vs. Utilidad (${selectedMonthName} ${selectedYear})`;
+                
+                expensesVsProfitMonthlyChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Total Gastos', 'Total Utilidad'],
+                        datasets: [{ data: [totalGastos, totalUtilidad], backgroundColor: ['#ef4444', '#22c55e'], borderRadius: 5 }]
+                    },
+                    options: { 
+                        responsive: true, 
+                        plugins: { 
+                            legend: { display: false },
+                            title: { display: true, text: titleText, font: { size: 16 }, color: '#374151' }
+                        },
+                        scales: { y: { beginAtZero: true, ticks: { callback: value => 'S/ ' + value.toLocaleString() } } }
+                    }
+                });
+            };
+
+            const updateExpensesVsProfitHistoricalChart = (totalGastos, totalUtilidad) => {
+                const ctx = document.getElementById('expensesVsProfitHistoricalChart').getContext('2d');
+                if (expensesVsProfitHistoricalChart) expensesVsProfitHistoricalChart.destroy();
+                expensesVsProfitHistoricalChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Total Gastos', 'Total Utilidad'],
+                        datasets: [{ data: [totalGastos, totalUtilidad], backgroundColor: ['#ef4444', '#22c55e'], borderRadius: 5 }]
+                    },
+                    options: { 
+                        responsive: true, 
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true, ticks: { callback: value => 'S/ ' + value.toLocaleString() } } }
+                    }
+                });
+            };
+
+            const updateExpenseDistributionChart = () => {
+                const ctx = document.getElementById('expenseDistributionChart').getContext('2d');
+                const expenseData = shipments.reduce((acc, s) => {
+                    if (s.gastoCombustible > 0) acc['Combustible'] = (acc['Combustible'] || 0) + s.gastoCombustible;
+                    if (s.expenses) s.expenses.forEach(exp => { acc[exp.type] = (acc[exp.type] || 0) + exp.amount; });
+                    return acc;
+                }, {});
+
+                if (expenseDistributionChart) expenseDistributionChart.destroy();
+                expenseDistributionChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(expenseData),
+                        datasets: [{ data: Object.values(expenseData), backgroundColor: ['#d946ef', '#ef4444', '#f59e0b', '#84cc16', '#22c55e', '#6b7280'] }]
+                    },
+                    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+                });
+            };
+            
+            const fullRender = () => {
+                renderShipments(searchInput.value);
+                updateDashboard();
+            };
+
+            // --- Funciones de Modales ---
+
+            const closeModal = (modal, backdrop) => {
+                modal.classList.remove('active');
+                backdrop.classList.remove('active');
+            };
+
+            // --- Modal de Edición de Viaje ---
+            
+            window.editShipment = (id) => {
+                const shipment = shipments.find(s => s.id === id);
+                if (shipment) {
+                    document.getElementById('edit-id').value = shipment.id;
+                    document.getElementById('edit-fecha-viaje').value = shipment.fechaViaje || getTodayDateString();
+                    document.getElementById('edit-guia-remitente').value = shipment.guiaRemitente;
+                    document.getElementById('edit-guia-transportista').value = shipment.guiaTransportista;
+                    document.getElementById('edit-transportista').value = shipment.transportista;
+                    document.getElementById('edit-origen').value = shipment.origen;
+                    document.getElementById('edit-destino').value = shipment.destino;
+                    document.getElementById('edit-tipo-carga').value = shipment.tipoCarga;
+                    document.getElementById('edit-tipo-carro').value = shipment.tipoCarro;
+                    editModal.classList.add('active');
+                    editModalBackdrop.classList.add('active');
+                }
+            };
+            
+            editForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const id = document.getElementById('edit-id').value;
+                const shipment = shipments.find(s => s.id === id);
+                if (shipment) {
+                    Object.assign(shipment, {
+                        fechaViaje: document.getElementById('edit-fecha-viaje').value,
+                        guiaRemitente: document.getElementById('edit-guia-remitente').value,
+                        guiaTransportista: document.getElementById('edit-guia-transportista').value,
+                        transportista: document.getElementById('edit-transportista').value,
+                        origen: document.getElementById('edit-origen').value,
+                        destino: document.getElementById('edit-destino').value,
+                        tipoCarga: document.getElementById('edit-tipo-carga').value,
+                        tipoCarro: document.getElementById('edit-tipo-carro').value,
+                    });
+                    saveToLocalStorage();
+                    fullRender();
+                    closeModal(editModal, editModalBackdrop);
+                }
+            });
+            
+            // --- Modal de Gastos y Facturas ---
+            
+            window.openExpensesModal = (id) => {
+                const shipment = shipments.find(s => s.id === id);
+                if (shipment) {
+                    document.getElementById('expenses-shipment-id').value = id;
+                    gastoCombustibleInput.value = shipment.gastoCombustible || '';
+                    document.getElementById('expenses-modal-title').textContent = `Gestión Financiera del Envío ${id}`;
+                    renderFacturas(id);
+                    renderExpenses(id);
+                    updateFinancialSummary(id);
+                    expensesModal.classList.add('active');
+                    expensesModalBackdrop.classList.add('active');
+                }
+            };
+            
+            const closeExpensesModal = () => {
+                closeModal(expensesModal, expensesModalBackdrop);
+                fullRender(); // Actualizar la tabla principal al cerrar
+            };
+
+            const updateFinancialSummary = (shipmentId) => {
+                const shipment = shipments.find(s => s.id === shipmentId);
+                if (!shipment) return;
+                
+                const { totalFacturado, totalGastos, utilidad, totalLiquido, totalDetraido } = calculateTripTotals(shipment);
+                
+                totalFacturadoDisplay.textContent = formatCurrency(totalFacturado);
+                totalLiquidoDisplay.textContent = formatCurrency(totalLiquido);
+                totalDetraidoDisplay.textContent = formatCurrency(totalDetraido);
+                totalExpensesDisplay.textContent = formatCurrency(totalGastos);
+                utilityDisplay.textContent = formatCurrency(utilidad);
+                
+                utilitySummaryBox.className = `p-3 rounded-lg text-center ${utilidad >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+            };
+            
+            // --- Gestión de Facturas (Dentro del Modal) ---
+            const renderFacturas = (shipmentId) => {
+                const shipment = shipments.find(s => s.id === shipmentId);
+                facturaList.innerHTML = '';
+                const facturas = shipment.facturas || [];
+                noFacturas.style.display = (facturas.length === 0) ? 'block' : 'none';
+
+                facturas.forEach((factura, index) => {
+                    const el = document.createElement('div');
+                    const isPagado = factura.estado === 'Pagado';
+                    const { montoTotal, montoDetraccion, montoLiquido } = getFacturaCalculations(factura);
+                    
+                    el.className = 'flex flex-col sm:flex-row sm:justify-between sm:items-center bg-white p-4 rounded-lg shadow-sm';
+                    el.innerHTML = `
+                        <div class="mb-2 sm:mb-0">
+                            <p class="font-semibold text-gray-800">${factura.numero}</p>
+                            <p class="text-sm text-gray-600">Total: ${formatCurrency(montoTotal)}</p>
+                            ${factura.aplicaDetraccion ? 
+                            `<p class="text-xs text-purple-700">Detracción: ${formatCurrency(montoDetraccion)}</p>
+                             <p class="text-xs text-blue-700 font-medium">Líquido: ${formatCurrency(montoLiquido)}</p>` : ''
+                            }
+                        </div>
+                        <div class="flex items-center gap-2 self-end sm:self-center">
+                            <button 
+                                class="p-2 w-10 h-10 rounded-full ${isPagado ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-600'} transition-colors"
+                                title="${isPagado ? 'Marcar como Pendiente' : 'Marcar como Pagado'}"
+                                onclick="toggleFacturaStatus('${shipmentId}', ${index})">
+                                <i class="fas ${isPagado ? 'fa-check' : 'fa-hourglass-half'}"></i>
+                            </button>
+                            <button class="text-red-500 hover:text-red-700 p-2 w-10 h-10" onclick="deleteFactura('${shipmentId}', ${index})"><i class="fas fa-trash"></i></button>
+                        </div>
+                    `;
+                    facturaList.appendChild(el);
+                });
+            };
+            
+            addFacturaForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const shipmentId = document.getElementById('expenses-shipment-id').value;
+                const shipment = shipments.find(s => s.id === shipmentId);
+                const numero = document.getElementById('factura-numero').value;
+                const monto = parseFloat(document.getElementById('factura-monto').value);
+                const aplicaDetraccion = document.getElementById('factura-detraccion').checked;
+
+                if (shipment && numero && monto > 0) {
+                    const newFactura = { numero, monto, estado: 'Pendiente', aplicaDetraccion };
+                    if (!shipment.facturas) shipment.facturas = [];
+                    shipment.facturas.push(newFactura);
+                    
+                    saveToLocalStorage();
+                    renderFacturas(shipmentId);
+                    updateFinancialSummary(shipmentId);
+                    addFacturaForm.reset();
+                    document.getElementById('factura-detraccion').checked = false;
+                } else {
+                    showToast("Por favor, ingrese un número y monto válidos.", "warning");
+                }
+            });
+
+            window.toggleFacturaStatus = (shipmentId, index) => {
+                const shipment = shipments.find(s => s.id === shipmentId);
+                if (shipment && shipment.facturas[index]) {
+                    const factura = shipment.facturas[index];
+                    factura.estado = (factura.estado === 'Pendiente') ? 'Pagado' : 'Pendiente';
+                    saveToLocalStorage();
+                    renderFacturas(shipmentId);
+                    updateFinancialSummary(shipmentId);
+                }
+            };
+            
+            window.deleteFactura = (shipmentId, index) => {
+                const shipment = shipments.find(s => s.id === shipmentId);
+                if (shipment && shipment.facturas[index]) {
+                    shipment.facturas.splice(index, 1);
+                    saveToLocalStorage();
+                    renderFacturas(shipmentId);
+                    updateFinancialSummary(shipmentId);
+                }
+            };
+
+            // --- Gestión de Otros Gastos (Dentro del Modal) ---
+            const renderExpenses = (shipmentId) => {
+                const shipment = shipments.find(s => s.id === shipmentId);
+                expenseList.innerHTML = '';
+                const expenses = shipment.expenses || [];
+                noExpenses.style.display = (expenses.length === 0) ? 'block' : 'none';
+                
+                expenses.forEach((expense, index) => {
+                    const expenseEl = document.createElement('div');
+                    expenseEl.className = 'flex justify-between items-center bg-white p-3 rounded-lg shadow-sm';
+                    expenseEl.innerHTML = `
+                        <div>
+                            <p class="font-semibold text-gray-800">${expense.type} <span class="text-gray-500 font-normal">- ${formatCurrency(expense.amount)}</span></p>
+                            ${expense.description ? `<p class="text-sm text-gray-600">${expense.description}</p>` : ''}
+                        </div>
+                        <button class="text-red-500 hover:text-red-700" onclick="deleteExpense('${shipmentId}', ${index})"><i class="fas fa-trash"></i></button>
+                    `;
+                    expenseList.appendChild(expenseEl);
+                });
+            };
+            
+            addExpenseForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const shipmentId = document.getElementById('expenses-shipment-id').value;
+                const shipment = shipments.find(s => s.id === shipmentId);
+                const amount = parseFloat(document.getElementById('expense-amount').value);
+
+                if (shipment && amount > 0) {
+                    const newExpense = {
+                        type: document.getElementById('expense-type').value,
+                        description: document.getElementById('expense-description').value,
+                        amount
+                    };
+                    if (!shipment.expenses) shipment.expenses = [];
+                    shipment.expenses.push(newExpense);
+                    
+                    saveToLocalStorage();
+                    renderExpenses(shipmentId);
+                    updateFinancialSummary(shipmentId);
+                    addExpenseForm.reset();
+                }
+            });
+            
+            window.deleteExpense = (shipmentId, index) => {
+                const shipment = shipments.find(s => s.id === shipmentId);
+                if (shipment && shipment.expenses) {
+                    shipment.expenses.splice(index, 1);
+                    saveToLocalStorage();
+                    renderExpenses(shipmentId);
+                    updateFinancialSummary(shipmentId);
+                }
+            };
+            
+            gastoCombustibleInput.addEventListener('input', (e) => {
+                 const shipmentId = document.getElementById('expenses-shipment-id').value;
+                 const shipment = shipments.find(s => s.id === shipmentId);
+                 if(shipment){
+                    shipment.gastoCombustible = parseFloat(e.target.value) || 0;
+                    saveToLocalStorage();
+                    updateFinancialSummary(shipmentId);
+                 }
+            });
+            
+            // --- Event Listeners Principales ---
+            
+            shippingForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const fechaViaje = document.getElementById('fecha-viaje').value;
+                if (!fechaViaje) {
+                    showToast("La Fecha del Viaje es obligatoria.", "error");
+                    return;
+                }
+                
+                const newShipment = {
+                    id: `GT-24${String(nextId++).padStart(3, '0')}`,
+                    fechaViaje: fechaViaje,
+                    guiaRemitente: document.getElementById('guia-remitente').value,
+                    guiaTransportista: document.getElementById('guia-transportista').value,
+                    transportista: document.getElementById('transportista').value,
+                    origen: document.getElementById('origen').value,
+                    destino: document.getElementById('destino').value,
+                    tipoCarga: document.getElementById('tipo-carga').value,
+                    tipoCarro: document.getElementById('tipo-carro').value,
+                    facturas: [],
+                    gastoCombustible: 0,
+                    expenses: [],
+                };
+                shipments.push(newShipment);
+                saveToLocalStorage();
+                fullRender(); // fullRender ya llama a updateDashboard
+                shippingForm.reset();
+                document.getElementById('fecha-viaje').value = getTodayDateString(); // Resetear fecha a hoy
+                showToast("Envío registrado con éxito.", "success");
+            });
+
+            window.deleteShipment = (id) => {
+                shipments = shipments.filter(s => s.id !== id);
+                saveToLocalStorage();
+                fullRender();
+                showToast("Envío eliminado.", "warning");
+            };
+            
+            searchInput.addEventListener('input', (e) => renderShipments(e.target.value));
+            
+            cancelEditBtn.addEventListener('click', () => closeModal(editModal, editModalBackdrop));
+            editModalBackdrop.addEventListener('click', () => closeModal(editModal, editModalBackdrop));
+            closeExpensesModalBtn.addEventListener('click', closeExpensesModal);
+            expensesModalBackdrop.addEventListener('click', closeExpensesModal);
+            
+            saveBtn.addEventListener('click', () => {
+                saveToLocalStorage();
+                showToast("¡Cambios guardados exitosamente!");
+            });
+
+            // --- Lógica de Importar/Exportar con MIGRACIÓN ---
+            
+            const migrateData = (data) => {
+                const today = getTodayDateString();
+                return data.map(item => {
+                    // Asegurar que los campos base existan
+                    if (!item.id) item.id = `GT-24${String(nextId++).padStart(3, '0')}`;
+                    if (!item.fechaViaje) item.fechaViaje = today;
+                    if (!item.expenses) item.expenses = [];
+                    if (item.gastoCombustible === undefined) item.gastoCombustible = 0;
+                    
+                    // Lógica de migración de facturas
+                    if (!item.facturas) {
+                        item.facturas = [];
+                        if (item.numeroFactura || (item.montoFacturado !== undefined && item.montoFacturado > 0)) {
+                            item.facturas.push({
+                                numero: item.numeroFactura || 'N/A',
+                                monto: item.montoFacturado || 0,
+                                estado: item.status || 'Pendiente',
+                                aplicaDetraccion: false 
+                            });
+                        }
+                    } else {
+                        item.facturas = item.facturas.map(f => ({
+                            numero: f.numero || 'N/A',
+                            monto: f.monto || 0,
+                            estado: f.estado || 'Pendiente',
+                            aplicaDetraccion: f.aplicaDetraccion || false
+                        }));
+                    }
+                    
+                    delete item.numeroFactura;
+                    delete item.montoFacturado;
+                    delete item.status;
+                    
+                    return item;
+                });
+            };
+
+            exportBtn.addEventListener('click', () => {
+                if(shipments.length === 0) {
+                    showToast("No hay datos para exportar.", "error");
+                    return;
+                }
+                const dataStr = JSON.stringify(shipments, null, 2);
+                const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'gestion_transporte_datos.json';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                showToast("Datos exportados con éxito.");
+            });
+
+            importBtn.addEventListener('click', () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = e => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = event => {
+                        try {
+                            let importedData = JSON.parse(event.target.result);
+                            if (!Array.isArray(importedData)) throw new Error("El archivo no contiene un array.");
+                            
+                            importedData = migrateData(importedData);
+
+                            const isValidData = importedData.every(item =>
+                                typeof item === 'object' && item !== null &&
+                                typeof item.id === 'string' &&
+                                item.hasOwnProperty('guiaRemitente') &&
+                                item.hasOwnProperty('fechaViaje') &&
+                                Array.isArray(item.facturas)
+                            );
+
+                            if (isValidData) {
+                                shipments = importedData;
+                                updateNextId();
+                                populateDateSelectors(); // Re-popular selectores con años importados
+                                saveToLocalStorage();
+                                fullRender();
+                                showToast("Datos importados y migrados con éxito.");
+                            } else {
+                                throw new Error("El formato de datos no es válido después de la migración.");
+                            }
+                        } catch (err) {
+                            showToast(`Error al procesar el archivo: ${err.message}`, "error");
+                            console.error("Error al importar:", err);
+                        }
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            });
+
+            // --- Inicialización ---
+            setGreeting();
+            loadFromLocalStorage();
+            populateDateSelectors(); // Popular selectores de fecha
+            document.getElementById('fecha-viaje').value = getTodayDateString(); // Poner fecha de hoy por defecto
+            fullRender();
+        });
+    </script>
+</body>
+</html>
